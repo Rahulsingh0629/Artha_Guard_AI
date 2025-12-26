@@ -6,6 +6,8 @@ from email.mime.multipart import MIMEMultipart
 from typing import List, Dict, Any
 from datetime import datetime
 from twilio.rest import Client
+import asyncio
+
 
 # [CHANGE] No SQL Imports
 from app.agents.intraday_scanner.scanner import MarketScanner
@@ -55,7 +57,10 @@ class AlertAgent:
         self._reset_daily_limits_if_new_day()
         
         # Assuming scanner is synchronous. If async, add 'await'
-        market_data = self.scanner.scan_watchlist(self.market_watchlist)
+        market_data = await asyncio.to_thread(
+            self.scanner.scan_watchlist,
+            self.market_watchlist
+        )        
         alerts_generated = []
 
         for data in market_data:
