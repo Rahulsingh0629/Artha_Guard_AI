@@ -88,3 +88,4 @@ yfinance
 schedule
 python-dotenv
 requests
+beanie
