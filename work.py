@@ -3,16 +3,28 @@ ArthaGuard Alert Worker
 Runs ONE alert scan cycle.
 Designed for GitHub Actions / Cron execution.
 """
-
-from app.database.session import SessionLocal
+import asyncio
+import logging
+from app.database.mongodb import init_db
 from app.agents.alert_engine.alert_agent import AlertAgent
 
-def run_once():
+# Setup Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("Worker")
+
+async def run_once():
     print("⏰ [Worker] Starting alert scan...")
-    db = SessionLocal()
+    
+    # 1. Connect to MongoDB (Required for Beanie)
     try:
+        await init_db()
+        
+        # 2. Initialize Agent
         agent = AlertAgent()
-        report = agent.run_monitoring_cycle(db)
+        
+        # 3. Run Cycle (Async)
+        # Note: We no longer pass 'db' because MongoDB handles connections internally
+        report = await agent.run_monitoring_cycle()
 
         print("✅ Alert scan completed")
         print(report)
@@ -20,8 +32,6 @@ def run_once():
     except Exception as e:
         print("❌ Worker error:", e)
 
-    finally:
-        db.close()
-
 if __name__ == "__main__":
-    run_once()
+    # Run the async function
+    asyncio.run(run_once())

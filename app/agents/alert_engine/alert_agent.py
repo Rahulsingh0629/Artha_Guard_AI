@@ -5,9 +5,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import List, Dict, Any
 from datetime import datetime
-from sqlalchemy.orm import Session
 from twilio.rest import Client
 
+# [CHANGE] No SQL Imports
 from app.agents.intraday_scanner.scanner import MarketScanner
 from app.agents.new_sentiment.news_agent import NewsIntelligenceAgent
 from app.database.models import User
@@ -17,7 +17,7 @@ logger = logging.getLogger("AlertAgent")
 
 class AlertAgent:
     """
-    Smart Market Monitor (24/7).
+    Smart Market Monitor (24/7) - MongoDB Version.
     Features:
     - Anti-Spam (No duplicate alerts per day)
     - Rate Limiting (Max 5 emails/day per user)
@@ -29,9 +29,9 @@ class AlertAgent:
         self.news_bot = NewsIntelligenceAgent()
         
         # --- MEMORY (Resets when you restart the worker) ---
-        # Stores what we sent today: {(user_id, symbol, type): "2023-12-25"}
+        # Stores what we sent today: {(user_email, symbol, type): "2023-12-25"}
         self.sent_history = {} 
-        # Stores count per user: {user_id: 3}
+        # Stores count per user: {user_email: 3}
         self.daily_counts = {}
         self.last_reset_date = datetime.now().date()
 
@@ -50,9 +50,11 @@ class AlertAgent:
             self.daily_counts.clear()
             self.last_reset_date = today
 
-    def run_monitoring_cycle(self, db: Session) -> Dict[str, Any]:
+    # [CHANGE] Made Async and Removed 'db' Argument
+    async def run_monitoring_cycle(self) -> Dict[str, Any]:
         self._reset_daily_limits_if_new_day()
         
+        # Assuming scanner is synchronous. If async, add 'await'
         market_data = self.scanner.scan_watchlist(self.market_watchlist)
         alerts_generated = []
 
@@ -64,28 +66,36 @@ class AlertAgent:
             price = data['current_price']
             rsi = data.get('rsi', 50)
             
-            # --- TIGHTER LOGIC (Only Important Stuff) ---
-            # Changed RSI from 30 to 25 (Only SUPER cheap stocks)
+            # Initialize as None
+            message = None
+            alert_type = None
+            subject = None
+
+            # --- LOGIC ---
             if rsi < 25: 
                 news_analysis = self.news_bot.get_intelligence(symbol)
                 headline = self._extract_headline(news_analysis)
                 message = self._generate_msg("OPPORTUNITY", symbol, price, "Deeply Undervalued", headline, "Strong Buy Zone.")
-                self._broadcast_smart_alert(db, message, symbol, "OPPORTUNITY", f"🚀 Buy Opportunity: {symbol}")
-                alerts_generated.append(message)
+                alert_type = "OPPORTUNITY"
+                subject = f"🚀 Buy Opportunity: {symbol}"
 
-            # Changed RSI from 75 to 80 (Only SUPER expensive stocks)
             elif rsi > 80:
                 news_analysis = self.news_bot.get_intelligence(symbol)
                 headline = self._extract_headline(news_analysis)
                 message = self._generate_msg("RISK", symbol, price, "Dangerous Highs", headline, "High Crash Risk.")
-                self._broadcast_smart_alert(db, message, symbol, "RISK", f"⚠️ Risk Alert: {symbol}")
-                alerts_generated.append(message)
+                alert_type = "RISK"
+                subject = f"⚠️ Risk Alert: {symbol}"
 
-            elif data.get('volume_change_pct', 0) > 60: # Increased to 60%
+            elif data.get('volume_change_pct', 0) > 60: 
                 news_analysis = self.news_bot.get_intelligence(symbol)
                 headline = self._extract_headline(news_analysis)
                 message = self._generate_msg("MOMENTUM", symbol, price, "Extreme Volume", headline, "Explosive movement detected.")
-                self._broadcast_smart_alert(db, message, symbol, "MOMENTUM", f"🔥 Momentum: {symbol}")
+                alert_type = "MOMENTUM"
+                subject = f"🔥 Momentum: {symbol}"
+
+            # --- FIX: Ensure all variables are Strings (not None) before calling ---
+            if message and alert_type and subject:
+                await self._broadcast_smart_alert(message, symbol, alert_type, subject)
                 alerts_generated.append(message)
 
         return {
@@ -94,46 +104,48 @@ class AlertAgent:
             "details": alerts_generated
         }
 
-    def _broadcast_smart_alert(self, db: Session, message_body: str, symbol: str, alert_type: str, subject: str):
+    # [CHANGE] Made Async for MongoDB Access
+    async def _broadcast_smart_alert(self, message_body: str, symbol: str, alert_type: str, subject: str):
         """
         Sends alerts ONLY if:
         1. User hasn't received THIS specific alert today.
         2. User hasn't exceeded 5 emails today.
         """
-        users = db.query(User).all()
+        # [CHANGE] Beanie Syntax: Fetch all users
+        users = await User.find_all().to_list()
         
         for user in users:
-            user_id = user.id
+            # We use email as ID since MongoDB IDs are objects
+            user_id = user.email 
             
             # --- CHECK 1: DAILY LIMIT (Max 5) ---
             current_count = self.daily_counts.get(user_id, 0)
             if current_count >= 5:
-                logger.info(f"🚫 Skipped {user.email}: Daily limit reached ({current_count}/5)")
+                # logger.info(f"🚫 Skipped {user.email}: Daily limit reached")
                 continue
 
             # --- CHECK 2: DUPLICATE CHECK ---
-            # Key = (User ID, Stock Name, Alert Type)
-            # Example: (1, "TATASTEEL", "OPPORTUNITY")
+            # Key = (User Email, Stock Name, Alert Type)
             alert_key = (user_id, symbol, alert_type)
             
             if alert_key in self.sent_history:
-                # We already sent this alert to this user today
                 continue 
 
             # --- SENDING ---
             sent_success = False
             
-            for user in users:
-            # 1. Send SMS (if phone exists)
-             if user.phone_number is not None:
+            # 1. Send SMS
+            if user.phone_number:
                 self._send_sms_notification(str(user.phone_number), message_body)
+                sent_success = True # Mark as sent if at least one method works
 
-            # 2. Send Email (if email exists)
-             if user.email is not None:
+            # 2. Send Email
+            if user.email:
                 self._send_email_notification(str(user.email), subject, message_body)
+                sent_success = True
 
             # --- UPDATE MEMORY ---
-             if sent_success:
+            if sent_success:
                 self.sent_history[alert_key] = True
                 self.daily_counts[user_id] = current_count + 1
                 logger.info(f"✅ Alert sent to {user.email} (Count: {current_count + 1}/5)")
@@ -153,7 +165,7 @@ class AlertAgent:
             lines = news_summary.split('\n')
             for line in lines:
                 if "🟢" in line or "🔴" in line or "[" in line:
-                    return line.strip()[:50] + "..." # Truncate to keep SMS short
+                    return line.strip()[:50] + "..." 
             return "Market sentiment mixed."
         except:
             return "N/A"
@@ -163,11 +175,11 @@ class AlertAgent:
             account_sid = os.getenv("TWILIO_SID")
             auth_token = os.getenv("TWILIO_AUTH_TOKEN")
             from_number = os.getenv("TWILIO_PHONE_NUMBER")
-            if account_sid:
+            if account_sid and auth_token and from_number:
                 client = Client(account_sid, auth_token)
                 client.messages.create(body=message, from_=from_number, to=phone_number)
         except Exception:
-            pass # Silent fail to keep logs clean
+            pass 
 
     def _send_email_notification(self, to_email: str, subject: str, body: str):
         try:
