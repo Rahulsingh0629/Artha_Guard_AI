@@ -26,9 +26,9 @@ aiohttp==3.9.5
 # ------------------------------
 # Data Science / Market Analysis
 # ------------------------------
-numpy==1.26.4
-scipy==1.13.1
-pandas==2.2.2
+numpy
+scipy
+pandas
 # ------------------------------
 # Technical Indicators (Scanner)
 # ------------------------------
