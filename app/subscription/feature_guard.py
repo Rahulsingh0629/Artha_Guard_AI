@@ -1,6 +1,4 @@
-from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from typing import cast 
 from app.database.models import User, UserActivityLog, UserPlan
 from app.subscription.plan_checker import PLAN_CONFIG, FeatureName
 
@@ -10,40 +8,30 @@ class AccessDeniedError(Exception):
 
 class FeatureGuard:
     @staticmethod
-    def check_access(db: Session, user: User, feature: FeatureName):
+    async def check_access(user: User, feature: FeatureName) -> bool:
         """
-        Main gatekeeper function.
+        Async Gatekeeper for MongoDB.
         Returns TRUE if allowed, raises AccessDeniedError if blocked.
         """
         
-        # 1. Get Plan Value safely (Handle both Enum object and String)
-        # SQLAlchemy returns the Enum object (UserPlan.FREE), but sometimes it might be a string.
-        if hasattr(user.plan_type, "value"):
-            user_plan_value = user.plan_type.value  # e.g., "pro"
-        else:
-            user_plan_value = str(user.plan_type)
+        # 1. Get Plan Value safely
+        plan_value = user.plan_type.value if hasattr(user.plan_type, "value") else str(user.plan_type)
 
-        # 2. ELITE users skip all checks (God mode)
-        # We compare value-to-value
-        if user_plan_value == UserPlan.ELITE.value:
+        # 2. ELITE users skip checks
+        if plan_value == UserPlan.ELITE.value:
             return True
 
-        # 3. Get Rules for the plan
-        rules = PLAN_CONFIG.get(user_plan_value, PLAN_CONFIG["free"])
+        # 3. Get Rules
+        rules = PLAN_CONFIG.get(plan_value, PLAN_CONFIG["free"])
 
-        # 4. Check if feature is completely allowed for this plan
+        # 4. Check Permission
         if feature not in rules["allowed_features"]:
-             raise AccessDeniedError(
-                f"Upgrade to PRO to access {feature.value}"
-            )
+             raise AccessDeniedError(f"Upgrade to PRO to access {feature.value}")
 
-        # 5. Check Usage Limits
+        # 5. Check Usage Limits (Async Count)
         limit = rules["limits"].get(feature)
         if limit:
-            # FIX: Use 'cast' to tell Pylance this is definitely an integer
-            user_id_int = cast(int, user.id) 
-            
-            usage_count = FeatureGuard._get_monthly_usage(db, user_id_int, feature)
+            usage_count = await FeatureGuard._get_monthly_usage(user.email, feature)
             
             if usage_count >= limit:
                 raise AccessDeniedError(
@@ -53,25 +41,27 @@ class FeatureGuard:
         return True
 
     @staticmethod
-    def log_usage(db: Session, user_id: int, feature: FeatureName):
+    async def log_usage(user_email: str, feature: FeatureName):
         """
-        Call this AFTER a feature is successfully used.
+        Async Logger: Saves activity to MongoDB.
         """
         log = UserActivityLog(
-            user_id=user_id,
+            user_email=user_email,
             action_type=feature.value,
             timestamp=datetime.utcnow()
         )
-        db.add(log)
-        db.commit()
+        await log.create()
 
     @staticmethod
-    def _get_monthly_usage(db: Session, user_id: int, feature: FeatureName) -> int:
-        """Counts usage in the last 30 days."""
+    async def _get_monthly_usage(user_email: str, feature: FeatureName) -> int:
+        """Counts usage in the last 30 days using Beanie."""
         thirty_days_ago = datetime.utcnow() - timedelta(days=30)
         
-        return db.query(UserActivityLog).filter(
-            UserActivityLog.user_id == user_id,
+        # Beanie Query
+        count = await UserActivityLog.find(
+            UserActivityLog.user_email == user_email,
             UserActivityLog.action_type == feature.value,
             UserActivityLog.timestamp >= thirty_days_ago
         ).count()
+        
+        return count

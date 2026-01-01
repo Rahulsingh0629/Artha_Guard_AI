@@ -9,7 +9,11 @@ from app.api import advisory_routes
 from app.api import fraud_routes
 
 
-app = FastAPI()
+
+app = FastAPI(
+    title="ArthaGuard AI",
+    description="AI for Financial Markets",
+    version="1.0.0")
 
 @app.on_event("startup")
 async def start_database():
@@ -17,23 +21,12 @@ async def start_database():
     await init_db()
     print("✅ Connected to MongoDB successfully!")
 
-# Register the Auth Router
 app.include_router(auth_router.router, prefix="/api/v1/auth", tags=["Authentication"])
-
-# Register the Portfolio Router
 app.include_router(portfolio_routes.router, prefix="/api/v1/portfolio", tags=["Portfolio"])
-
-# Register the News Router
 app.include_router(news_routes.router, prefix="/api/v1/news", tags=["News"])
-
-# Register the Scanner Router
 app.include_router(scanner_routes.router, prefix="/api/v1/scanner", tags=["Scanner"])
-
-# Register the Advisory Router
 app.include_router(advisory_routes.router, prefix="/api/v1/advisory", tags=["Advisory Agent"])
-
 app.include_router(fraud_routes.router, prefix="/api/v1/fraud", tags=["Fraud Agent"])
-# ... existing tip_routes include ...
 
 @app.get("/")
 def read_root():
