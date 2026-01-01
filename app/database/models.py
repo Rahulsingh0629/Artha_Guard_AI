@@ -1,7 +1,7 @@
 from typing import Optional
 from beanie import Document
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, timedelta
 import enum
 
 # --- ENUMS (Same as before) ---
@@ -83,3 +83,16 @@ class AlertConfig(Document):
 
     class Settings:
         name = "alert_configs"
+
+class OTPVerification(Document):
+    email: str
+    otp_code: str
+    phone_number: str
+    expires_at: datetime = Field(default_factory=lambda: datetime.utcnow() + timedelta(minutes=10))
+
+    class Settings:
+        name = "otp_verification"
+        indexes = [
+            "email",
+            {"name": "expire_index", "fields": ["expires_at"], "expireAfterSeconds": 0} 
+        ]
