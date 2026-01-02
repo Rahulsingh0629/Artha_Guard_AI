@@ -1,15 +1,36 @@
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
-from app.database.models import User
+
+# Import ALL your models here
+from app.database.models import (
+    User, 
+    Portfolio, 
+    UserActivityLog, 
+    TipCheckHistory, 
+    AlertConfig, 
+    OTPVerification
+)
 
 async def init_db():
-    # 1. Get the URL
     mongo_url = os.getenv("MONGO_URL")
     
-    # 2. Create Client
+    if not mongo_url:
+        print("❌ Error: MONGO_URL not found in .env file!")
+        return
+
     client = AsyncIOMotorClient(mongo_url)
     
-    # 3. Initialize Beanie
-    # FIX: Add '# type: ignore' to silence the Pylance error
-    await init_beanie(database=client.arthaguard_db, document_models=[User])  # type: ignore
+    # FIX: Add '# type: ignore' at the end of this line to silence the error
+    await init_beanie(
+        database=client.arthaguard_db,  # type: ignore
+        document_models=[
+            User,
+            Portfolio,
+            UserActivityLog,
+            TipCheckHistory,
+            AlertConfig,
+            OTPVerification
+        ]
+    )
+    print("✅ Database Initialized with all models.")

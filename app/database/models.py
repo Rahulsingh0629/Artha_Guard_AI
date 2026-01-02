@@ -3,8 +3,10 @@ from beanie import Document
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import enum
+# 👇 ADD THESE IMPORTS
+from pymongo import IndexModel, ASCENDING
 
-# --- ENUMS (Same as before) ---
+# --- ENUMS ---
 class UserPlan(str, enum.Enum):
     FREE = "free"
     PRO = "pro"
@@ -27,7 +29,7 @@ class User(Document):
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # --- ADVISORY PROFILE (Stored directly inside the User document) ---
+    # --- ADVISORY PROFILE ---
     age: Optional[int] = None
     annual_income: Optional[float] = None
     monthly_savings: Optional[float] = None
@@ -36,12 +38,12 @@ class User(Document):
     time_horizon_years: Optional[int] = None
 
     class Settings:
-        name = "users" # Collection Name
-        indexes = ["email", "phone_number"] # Make these searchable/unique
+        name = "users"
+        indexes = ["email", "phone_number"]
 
 # --- PORTFOLIO MODEL ---
 class Portfolio(Document):
-    user_email: str  # We use email to link to the User
+    user_email: str
     stock_symbol: str
     quantity: int = 0
     average_buy_price: float = 0.0
@@ -78,12 +80,13 @@ class AlertConfig(Document):
     user_email: str
     stock_symbol: str
     target_price: float
-    condition: str # e.g., "ABOVE", "BELOW"
+    condition: str
     is_active: bool = True
 
     class Settings:
         name = "alert_configs"
 
+# --- OTP VERIFICATION (FIXED) ---
 class OTPVerification(Document):
     email: str
     otp_code: str
@@ -92,7 +95,11 @@ class OTPVerification(Document):
 
     class Settings:
         name = "otp_verification"
+        # 👇 THE FIX IS HERE: Use IndexModel for TTL indexes
         indexes = [
             "email",
-            {"name": "expire_index", "fields": ["expires_at"], "expireAfterSeconds": 0} 
+            IndexModel(
+                [("expires_at", ASCENDING)],
+                expireAfterSeconds=0
+            )
         ]
