@@ -92,3 +92,4 @@ beanie
 
 motor
 google-generativeai
+PIL
