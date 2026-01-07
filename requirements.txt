@@ -92,4 +92,4 @@ beanie
 
 motor
 google-generativeai
-PIL
+Pillow
