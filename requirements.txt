@@ -90,5 +90,7 @@ python-dotenv
 requests
 beanie
 
+sendgrid
+
 motor
 
