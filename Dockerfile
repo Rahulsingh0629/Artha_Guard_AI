@@ -20,4 +20,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 5. Run the app (Change 'app:app' to your file name, e.g., 'main:app')
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:10000", "app.main:app"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "10000"]

@@ -93,4 +93,5 @@ beanie
 sendgrid
 
 motor
-
+google-generativeai
+Pillow
