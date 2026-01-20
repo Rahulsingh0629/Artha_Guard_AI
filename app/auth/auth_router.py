@@ -6,7 +6,6 @@ from app.auth.jwt_manager import create_access_token, get_password_hash
 
 router = APIRouter()
 
-# ----------- SCHEMAS -----------
 
 class UserRegister(BaseModel):
     full_name: str
@@ -19,7 +18,6 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
-# ----------- REGISTER (NO OTP) -----------
 
 @router.post("/register")
 async def register(user_data: UserRegister):
@@ -32,7 +30,7 @@ async def register(user_data: UserRegister):
         full_name=user_data.full_name,
         phone_number=user_data.phone_number,
         hashed_password=get_password_hash(user_data.password),
-        is_active=True   # ✅ ACTIVE IMMEDIATELY
+        is_active=True   
     )
 
     await user.create()
@@ -43,7 +41,6 @@ async def register(user_data: UserRegister):
         "email": user_data.email
     }
 
-# ----------- LOGIN -----------
 
 @router.post("/login")
 async def login(login_data: UserLogin):

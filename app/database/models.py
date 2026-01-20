@@ -3,10 +3,8 @@ from beanie import Document
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 import enum
-# 👇 ADD THESE IMPORTS
 from pymongo import IndexModel, ASCENDING
 
-# --- ENUMS ---
 class UserPlan(str, enum.Enum):
     FREE = "free"
     PRO = "pro"
@@ -18,7 +16,6 @@ class RiskLevel(str, enum.Enum):
     HIGH = "high"
     SCAM = "scam"
 
-# --- USER MODEL ---
 class User(Document):
     email: str 
     full_name: Optional[str] = None
@@ -29,7 +26,6 @@ class User(Document):
     is_active: bool = True
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # --- ADVISORY PROFILE ---
     age: Optional[int] = None
     annual_income: Optional[float] = None
     monthly_savings: Optional[float] = None
@@ -41,7 +37,6 @@ class User(Document):
         name = "users"
         indexes = ["email", "phone_number"]
 
-# --- PORTFOLIO MODEL ---
 class Portfolio(Document):
     user_email: str
     stock_symbol: str
@@ -54,7 +49,6 @@ class Portfolio(Document):
     class Settings:
         name = "portfolios"
 
-# --- ACTIVITY LOGS ---
 class UserActivityLog(Document):
     user_email: str
     action_type: str
@@ -63,7 +57,6 @@ class UserActivityLog(Document):
     class Settings:
         name = "activity_logs"
 
-# --- FAKE TIP CHECK HISTORY ---
 class TipCheckHistory(Document):
     user_email: str
     tip_text_raw: str
@@ -75,7 +68,6 @@ class TipCheckHistory(Document):
     class Settings:
         name = "tip_check_history"
 
-# --- ALERT CONFIG ---
 class AlertConfig(Document):
     user_email: str
     stock_symbol: str
@@ -86,7 +78,6 @@ class AlertConfig(Document):
     class Settings:
         name = "alert_configs"
 
-# --- OTP VERIFICATION (FIXED) ---
 class OTPVerification(Document):
     email: str
     otp_code: str
@@ -95,7 +86,6 @@ class OTPVerification(Document):
 
     class Settings:
         name = "otp_verification"
-        # 👇 THE FIX IS HERE: Use IndexModel for TTL indexes
         indexes = [
             "email",
             IndexModel(

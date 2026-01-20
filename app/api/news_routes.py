@@ -11,10 +11,6 @@ class NewsRequest(BaseModel):
 
 @router.post("/news-analysis")
 def analyze_news(request: NewsRequest):
-    """
-    Endpoint for the News AI.
-    Input: "Any bad news about HDFC Bank?"
-    Output: Structured sentiment report.
-    """
+   
     response = news_bot.get_intelligence(request.query)
     return {"ai_response": response}
