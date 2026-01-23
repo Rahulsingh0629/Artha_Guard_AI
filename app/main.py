@@ -7,6 +7,7 @@ from app.api import news_routes
 from app.api import scanner_routes
 from app.api import advisory_routes
 from app.api import fraud_routes
+from app.api import market_routes
 
 
 
@@ -27,6 +28,7 @@ app.include_router(news_routes.router, prefix="/api/v1/news", tags=["News"])
 app.include_router(scanner_routes.router, prefix="/api/v1/scanner", tags=["Scanner"])
 app.include_router(advisory_routes.router, prefix="/api/v1/advisory", tags=["Advisory Agent"])
 app.include_router(fraud_routes.router, prefix="/api/v1/fraud", tags=["Fraud Agent"])
+app.include_router(market_routes.router, prefix="/api/v1/market", tags=["Market"])
 
 @app.get("/")
 def read_root():
