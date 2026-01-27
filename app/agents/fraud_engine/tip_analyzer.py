@@ -14,7 +14,6 @@ class TipIntegrityAgent:
             raise ValueError("GEMINI_API_KEY is missing!")
         
         genai.configure(api_key=self.api_key)
-        # Gemini 1.5 Flash is best for Mixed Inputs (Text + Image)
         self.model = genai.GenerativeModel('gemini-1.5-flash')
         self.news_bot = NewsIntelligenceAgent()
 

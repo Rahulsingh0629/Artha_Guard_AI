@@ -20,7 +20,7 @@ async def init_db():
     client = AsyncIOMotorClient(mongo_url)
     
     await init_beanie(
-        database=client.get_default_database(),  # type: ignore
+        database=client.arthaguard_db,  # type: ignore
         document_models=[
             User,
             Portfolio,

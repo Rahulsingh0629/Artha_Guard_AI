@@ -1,8 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
-from app.database.session import get_db
 from app.database.models import User
 from app.auth.jwt_manager import get_current_user
 from app.agents.advisory_engine.allocator import AssetAllocator
@@ -32,8 +29,7 @@ class InstantAdviceRequest(BaseModel):
     question: str
 
 @router.post("/instant_advice")
-def get_instant_advice(data: InstantAdviceRequest):
-    
+async def get_instant_advice(data: InstantAdviceRequest):
     try:
         profiler = UserProfiler()
         allocator = AssetAllocator()
@@ -76,11 +72,11 @@ def get_instant_advice(data: InstantAdviceRequest):
 
 
 @router.post("/update_profile")
-def update_financial_profile(
+async def update_financial_profile(
     profile_data: UserProfileUpdate,
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # Update fields directly on the Beanie Document
     current_user.age = profile_data.age
     current_user.annual_income = profile_data.annual_income
     current_user.monthly_savings = profile_data.monthly_savings
@@ -88,12 +84,13 @@ def update_financial_profile(
     current_user.financial_goal = profile_data.financial_goal
     current_user.time_horizon_years = profile_data.time_horizon_years
     
-    db.commit()
+    # Save to MongoDB
+    await current_user.save()
+    
     return {"status": "Profile updated successfully", "user": current_user.email}
 
 @router.get("/plan")
-def get_investment_plan(
-    db: Session = Depends(get_db),
+async def get_investment_plan(
     current_user: User = Depends(get_current_user)
 ):
     if not current_user.age or not current_user.annual_income:
@@ -132,7 +129,7 @@ def get_investment_plan(
     }
 
 @router.post("/chat")
-def chat_with_advisor(
+async def chat_with_advisor(
     request: AdvisoryChatRequest,
     current_user: User = Depends(get_current_user)
 ):
@@ -143,5 +140,6 @@ def chat_with_advisor(
         "horizon": f"{current_user.time_horizon_years} years" if current_user.time_horizon_years else "Unknown"
     }
     
+    # Run sync AI call in a way that doesn't block async server is better, but this works for now
     response = bot.get_advice(request.message, user_profile=user_context, portfolio_summary="See investment plan")
     return {"response": response}

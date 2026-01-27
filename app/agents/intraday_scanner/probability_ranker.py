@@ -25,16 +25,12 @@ class FinancialAdvisorAgent:
         # 3. Probability & Ranking Logic
         advice = self._generate_verdict(analysis)
         
-        return f"""
-**Analysis for {stock_symbol}**
-Price: ₹{analysis['current_price']}
-
-**AI Verdict:** {advice}
-
-*Key Indicators:*
-- Trend: {analysis['trend']}
-- RSI: {analysis['rsi']}
-"""
+        return f"""**Analysis for {stock_symbol}**
+                    Price: ₹{analysis['current_price']}
+                    **AI Verdict:** {advice}
+                    **Key Indicators:**
+                    - Trend: {analysis['trend']}
+                    - RSI: {analysis['rsi']}"""
 
     def _generate_verdict(self, data: dict) -> str:
         """Decides the probability of a move based on indicators."""
