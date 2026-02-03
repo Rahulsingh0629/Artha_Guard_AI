@@ -1,8 +1,13 @@
 from fastapi import APIRouter, HTTPException
 import requests
+import time
+from datetime import datetime
 
 router = APIRouter()
 
+# --------------------------------------------------
+# NSE CONFIG
+# --------------------------------------------------
 BASE_URL = "https://www.nseindia.com"
 
 HEADERS = {
@@ -12,9 +17,27 @@ HEADERS = {
     "Referer": "https://www.nseindia.com"
 }
 
+# --------------------------------------------------
+# SIMPLE IN-MEMORY CACHE
+# --------------------------------------------------
+CACHE = {}
+CACHE_TTL = 30  # seconds
+
+
+def cache_get(key):
+    if key in CACHE:
+        data, ts = CACHE[key]
+        if time.time() - ts < CACHE_TTL:
+            return data
+    return None
+
+
+def cache_set(key, value):
+    CACHE[key] = (value, time.time())
+
 
 # --------------------------------------------------
-# Create NSE-safe session
+# NSE SESSION (ANTI-BLOCK)
 # --------------------------------------------------
 def create_session():
     session = requests.Session()
@@ -23,21 +46,40 @@ def create_session():
 
 
 # --------------------------------------------------
-# 1️⃣ ALL MAJOR INDICES (NIFTY, SENSEX, BANKNIFTY…)
+# 1️⃣ MARKET STATUS
+# --------------------------------------------------
+@router.get("/market-status")
+def market_status():
+    now = datetime.now()
+    weekday = now.weekday()  # 0 = Monday
+
+    if weekday >= 5:
+        return {"status": "CLOSED", "reason": "Weekend"}
+
+    if now.hour < 9 or (now.hour == 9 and now.minute < 15):
+        return {"status": "PRE_OPEN"}
+
+    if now.hour > 15 or (now.hour == 15 and now.minute > 30):
+        return {"status": "CLOSED"}
+
+    return {"status": "OPEN"}
+
+
+# --------------------------------------------------
+# 2️⃣ ALL MAJOR INDICES
 # --------------------------------------------------
 @router.get("/indices")
 def get_indices():
+    cached = cache_get("indices")
+    if cached:
+        return cached
+
     try:
         session = create_session()
-        response = session.get(
-            f"{BASE_URL}/api/allIndices",
-            headers=HEADERS,
-            timeout=5
-        )
+        res = session.get(f"{BASE_URL}/api/allIndices", headers=HEADERS)
+        data = res.json()["data"]
 
-        data = response.json()["data"]
-
-        REQUIRED_INDICES = {
+        REQUIRED = {
             "NIFTY 50": "nifty",
             "SENSEX": "sensex",
             "NIFTY BANK": "bankNifty",
@@ -48,16 +90,17 @@ def get_indices():
 
         result = {}
 
-        for index in data:
-            if index["index"] in REQUIRED_INDICES:
-                key = REQUIRED_INDICES[index["index"]]
+        for i in data:
+            if i["index"] in REQUIRED:
+                key = REQUIRED[i["index"]]
                 result[key] = {
-                    "name": index["index"],
-                    "price": index["last"],
-                    "change": index["change"],
-                    "percent": index["percentChange"]
+                    "name": i["index"],
+                    "price": i["last"],
+                    "change": i["change"],
+                    "percent": i["percentChange"]
                 }
 
+        cache_set("indices", result)
         return result
 
     except Exception as e:
@@ -65,68 +108,120 @@ def get_indices():
 
 
 # --------------------------------------------------
-# 2️⃣ ALL NIFTY-50 STOCKS (LIVE)
+# 3️⃣ ALL NIFTY-50 STOCKS (LIVE)
 # --------------------------------------------------
 @router.get("/stocks")
 def get_all_stocks():
+    cached = cache_get("stocks")
+    if cached:
+        return cached
+
     try:
         session = create_session()
-        response = session.get(
+        res = session.get(
             f"{BASE_URL}/api/equity-stockIndices?index=NIFTY%2050",
-            headers=HEADERS,
-            timeout=5
+            headers=HEADERS
         )
 
-        stocks = response.json()["data"]
-
+        stocks = res.json()["data"]
         result = []
 
-        for stock in stocks:
+        for s in stocks:
             result.append({
-                "symbol": stock["symbol"],
-                "name": stock["meta"]["companyName"],
-                "price": stock["lastPrice"],
-                "change": stock["change"],
-                "percent": stock["pChange"],
-                "open": stock["open"],
-                "high": stock["dayHigh"],
-                "low": stock["dayLow"],
-                "previousClose": stock["previousClose"]
+                "symbol": s["symbol"],
+                "name": s["meta"]["companyName"],
+                "price": s["lastPrice"],
+                "change": s["change"],
+                "percent": s["pChange"],
+                "open": s["open"],
+                "high": s["dayHigh"],
+                "low": s["dayLow"],
+                "previousClose": s["previousClose"]
             })
 
-        return {
-            "count": len(result),
-            "stocks": result
-        }
+        response = {"count": len(result), "stocks": result}
+        cache_set("stocks", response)
+        return response
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 # --------------------------------------------------
-# 3️⃣ SINGLE STOCK DETAILS (ANY NSE STOCK)
+# 4️⃣ TOP GAINERS & LOSERS
 # --------------------------------------------------
-@router.get("/stock/{symbol}")
-def get_stock(symbol: str):
+@router.get("/top-movers")
+def top_movers():
+    cached = cache_get("top_movers")
+    if cached:
+        return cached
+
     try:
         session = create_session()
-        response = session.get(
-            f"{BASE_URL}/api/quote-equity?symbol={symbol}",
-            headers=HEADERS,
-            timeout=5
+        res = session.get(
+            f"{BASE_URL}/api/equity-stockIndices?index=NIFTY%2050",
+            headers=HEADERS
         )
 
-        data = response.json()["priceInfo"]
+        stocks = res.json()["data"]
+        stocks_sorted = sorted(stocks, key=lambda x: x["pChange"], reverse=True)
+
+        gainers = stocks_sorted[:5]
+        losers = stocks_sorted[-5:]
+
+        response = {
+            "gainers": [
+                {"symbol": g["symbol"], "percent": g["pChange"]}
+                for g in gainers
+            ],
+            "losers": [
+                {"symbol": l["symbol"], "percent": l["pChange"]}
+                for l in losers
+            ]
+        }
+
+        cache_set("top_movers", response)
+        return response
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --------------------------------------------------
+# 5️⃣ SINGLE STOCK DETAILS
+# --------------------------------------------------
+@router.get("/stock/{symbol}")
+def stock_details(symbol: str):
+    try:
+        session = create_session()
+        res = session.get(
+            f"{BASE_URL}/api/quote-equity?symbol={symbol}",
+            headers=HEADERS
+        )
+
+        p = res.json()["priceInfo"]
 
         return {
             "symbol": symbol,
-            "price": data["lastPrice"],
-            "change": data["change"],
-            "percent": data["pChange"],
-            "open": data["open"],
-            "high": data["intraDayHighLow"]["max"],
-            "low": data["intraDayHighLow"]["min"]
+            "price": p["lastPrice"],
+            "change": p["change"],
+            "percent": p["pChange"],
+            "open": p["open"],
+            "high": p["intraDayHighLow"]["max"],
+            "low": p["intraDayHighLow"]["min"]
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --------------------------------------------------
+# 6️⃣ HEALTH CHECK
+# --------------------------------------------------
+@router.get("/health")
+def health():
+    return {
+        "status": "OK",
+        "service": "Market Backend",
+        "time": datetime.now()
+    }
