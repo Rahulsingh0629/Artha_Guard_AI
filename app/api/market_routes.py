@@ -14,7 +14,8 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     "Accept": "application/json",
     "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.nseindia.com"
+    "Referer": "https://www.nseindia.com",
+    "Connection": "keep-alive",
 }
 
 # --------------------------------------------------
@@ -37,11 +38,16 @@ def cache_set(key, value):
 
 
 # --------------------------------------------------
-# NSE SESSION (ANTI-BLOCK)
+# NSE SESSION (ANTI-BLOCK, HARDENED)
 # --------------------------------------------------
 def create_session():
     session = requests.Session()
-    session.get(BASE_URL, headers=HEADERS, timeout=5)
+    session.headers.update(HEADERS)
+
+    home = session.get(BASE_URL, timeout=10)
+    if home.status_code != 200:
+        raise Exception("Failed to initialize NSE session")
+
     return session
 
 
@@ -51,7 +57,7 @@ def create_session():
 @router.get("/market-status")
 def market_status():
     now = datetime.now()
-    weekday = now.weekday()  # 0 = Monday
+    weekday = now.weekday()
 
     if weekday >= 5:
         return {"status": "CLOSED", "reason": "Weekend"}
@@ -76,8 +82,11 @@ def get_indices():
 
     try:
         session = create_session()
-        res = session.get(f"{BASE_URL}/api/allIndices", headers=HEADERS)
-        data = res.json()["data"]
+        res = session.get(f"{BASE_URL}/api/allIndices", timeout=10)
+
+        data = res.json()
+        if "data" not in data:
+            raise Exception("Invalid indices response")
 
         REQUIRED = {
             "NIFTY 50": "nifty",
@@ -85,19 +94,18 @@ def get_indices():
             "NIFTY BANK": "bankNifty",
             "NIFTY FIN SERVICE": "finNifty",
             "NIFTY MIDCAP 50": "midcap",
-            "NIFTY SMALLCAP 50": "smallcap"
+            "NIFTY SMALLCAP 50": "smallcap",
         }
 
         result = {}
-
-        for i in data:
-            if i["index"] in REQUIRED:
+        for i in data["data"]:
+            if i.get("index") in REQUIRED:
                 key = REQUIRED[i["index"]]
                 result[key] = {
                     "name": i["index"],
-                    "price": i["last"],
-                    "change": i["change"],
-                    "percent": i["percentChange"]
+                    "price": i.get("last"),
+                    "change": i.get("change"),
+                    "percent": i.get("percentChange"),
                 }
 
         cache_set("indices", result)
@@ -108,7 +116,7 @@ def get_indices():
 
 
 # --------------------------------------------------
-# 3️⃣ ALL NIFTY-50 STOCKS (LIVE)
+# 3️⃣ ALL NIFTY-50 STOCKS
 # --------------------------------------------------
 @router.get("/stocks")
 def get_all_stocks():
@@ -120,23 +128,25 @@ def get_all_stocks():
         session = create_session()
         res = session.get(
             f"{BASE_URL}/api/equity-stockIndices?index=NIFTY%2050",
-            headers=HEADERS
+            timeout=10,
         )
 
-        stocks = res.json()["data"]
-        result = []
+        data = res.json()
+        if "data" not in data or not isinstance(data["data"], list):
+            raise Exception("Invalid stock data from NSE")
 
-        for s in stocks:
+        result = []
+        for s in data["data"]:
             result.append({
-                "symbol": s["symbol"],
-                "name": s["meta"]["companyName"],
-                "price": s["lastPrice"],
-                "change": s["change"],
-                "percent": s["pChange"],
-                "open": s["open"],
-                "high": s["dayHigh"],
-                "low": s["dayLow"],
-                "previousClose": s["previousClose"]
+                "symbol": s.get("symbol"),
+                "name": s.get("meta", {}).get("companyName", s.get("symbol")),
+                "price": s.get("lastPrice"),
+                "change": s.get("change"),
+                "percent": s.get("pChange"),
+                "open": s.get("open"),
+                "high": s.get("dayHigh"),
+                "low": s.get("dayLow"),
+                "previousClose": s.get("previousClose"),
             })
 
         response = {"count": len(result), "stocks": result}
@@ -144,6 +154,7 @@ def get_all_stocks():
         return response
 
     except Exception as e:
+        print("🔥 STOCKS ERROR:", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -160,24 +171,26 @@ def top_movers():
         session = create_session()
         res = session.get(
             f"{BASE_URL}/api/equity-stockIndices?index=NIFTY%2050",
-            headers=HEADERS
+            timeout=10,
         )
 
-        stocks = res.json()["data"]
-        stocks_sorted = sorted(stocks, key=lambda x: x["pChange"], reverse=True)
+        data = res.json()
+        if "data" not in data:
+            raise Exception("Invalid top movers data")
 
-        gainers = stocks_sorted[:5]
-        losers = stocks_sorted[-5:]
+        stocks_sorted = sorted(
+            data["data"], key=lambda x: x.get("pChange", 0), reverse=True
+        )
 
         response = {
             "gainers": [
-                {"symbol": g["symbol"], "percent": g["pChange"]}
-                for g in gainers
+                {"symbol": s.get("symbol"), "percent": s.get("pChange")}
+                for s in stocks_sorted[:5]
             ],
             "losers": [
-                {"symbol": l["symbol"], "percent": l["pChange"]}
-                for l in losers
-            ]
+                {"symbol": s.get("symbol"), "percent": s.get("pChange")}
+                for s in stocks_sorted[-5:]
+            ],
         }
 
         cache_set("top_movers", response)
@@ -188,27 +201,39 @@ def top_movers():
 
 
 # --------------------------------------------------
-# 5️⃣ SINGLE STOCK DETAILS
+# 5️⃣ SINGLE STOCK DETAILS (SAFE)
 # --------------------------------------------------
 @router.get("/stock/{symbol}")
 def stock_details(symbol: str):
+    symbol_upper = symbol.upper()
+
+    # 🚫 BLOCK INDEX SYMBOLS (VERY IMPORTANT)
+    if any(k in symbol_upper for k in ["NIFTY", "SENSEX", "BANK", "MIDCAP", "SMALLCAP"]):
+        raise HTTPException(
+            status_code=400,
+            detail="Index symbols are not supported for stock details",
+        )
+
     try:
         session = create_session()
         res = session.get(
-            f"{BASE_URL}/api/quote-equity?symbol={symbol}",
-            headers=HEADERS
+            f"{BASE_URL}/api/quote-equity?symbol={symbol_upper}",
+            timeout=10,
         )
 
-        p = res.json()["priceInfo"]
+        data = res.json()
+        p = data.get("priceInfo")
+        if not p:
+            raise Exception("Invalid stock detail response")
 
         return {
-            "symbol": symbol,
-            "price": p["lastPrice"],
-            "change": p["change"],
-            "percent": p["pChange"],
-            "open": p["open"],
-            "high": p["intraDayHighLow"]["max"],
-            "low": p["intraDayHighLow"]["min"]
+            "symbol": symbol_upper,
+            "price": p.get("lastPrice"),
+            "change": p.get("change"),
+            "percent": p.get("pChange"),
+            "open": p.get("open"),
+            "high": p.get("intraDayHighLow", {}).get("max"),
+            "low": p.get("intraDayHighLow", {}).get("min"),
         }
 
     except Exception as e:
@@ -223,5 +248,5 @@ def health():
     return {
         "status": "OK",
         "service": "Market Backend",
-        "time": datetime.now()
+        "time": datetime.now(),
     }

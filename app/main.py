@@ -1,5 +1,5 @@
-# ... existing imports ...
-from app.auth import auth_router # <--- Import this
+from fastapi.middleware.cors import CORSMiddleware
+from app.auth import auth_router 
 from app.database.mongodb import init_db
 from fastapi import FastAPI
 from app.api import portfolio_routes
@@ -10,11 +10,21 @@ from app.api import fraud_routes
 from app.api import market_routes
 
 
-
 app = FastAPI(
     title="ArthaGuard AI",
     description="AI for Financial Markets",
     version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # React (Vite) frontend
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],   # GET, POST, PUT, DELETE, OPTIONS
+    allow_headers=["*"],   # Authorization, Content-Type, etc.
+)
 
 @app.on_event("startup")
 async def start_database():

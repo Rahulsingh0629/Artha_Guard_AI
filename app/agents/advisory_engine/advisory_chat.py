@@ -11,7 +11,8 @@ class AdvisoryAI:
             raise ValueError("GEMINI_API_KEY not found. Please set it in your .env file.")
             
         genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel('gemini-pro')
+        print("🚀 DEBUG: Loading Model GEMINI-1.5-FLASH")
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
 
     def get_advice(self, user_query: str, user_profile: Dict[str, Any], portfolio_summary: str) -> str:
         """
