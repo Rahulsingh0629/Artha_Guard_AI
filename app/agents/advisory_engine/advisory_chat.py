@@ -1,6 +1,9 @@
 import google.generativeai as genai
 import os
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class AdvisoryAI:
     def __init__(self):
@@ -11,38 +14,34 @@ class AdvisoryAI:
             raise ValueError("GEMINI_API_KEY not found. Please set it in your .env file.")
             
         genai.configure(api_key=self.api_key)
-        print("🚀 DEBUG: Loading Model GEMINI-1.5-FLASH")
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        self.model = genai.GenerativeModel('gemini-flash-latest')
 
     def get_advice(self, user_query: str, user_profile: Dict[str, Any], portfolio_summary: str) -> str:
-        """
-        Generates a highly contextual financial answer using Gemini AI.
-        """
-        
-        # 1. Construct the "System Persona"
-        # We tell the AI exactly who it is and how to behave.
-        system_prompt = f"""
-        ROLE: You are 'ArthaGuard', an elite AI Wealth Manager for the Indian Market (NSE/BSE).
-        
-        USER CONTEXT:
-        - Risk Profile: {user_profile.get('risk_category', 'Unknown')}
-        - Investment Horizon: {user_profile.get('horizon', 'Long Term')}
-        - Current Portfolio: {portfolio_summary}
-        
-        USER QUESTION: "{user_query}"
-        
-        INSTRUCTIONS:
-        1. Answer specifically for the Indian context (mention Nifty, Sensex, SEBI rules if relevant).
-        2. Be professional, concise, and empathetic.
-        3. If the user asks for 'Tips' (gambling), strictly warn them about risks.
-        4. Use bullet points for clarity.
-        5. Disclaimer: Always end with 'I am an AI, not a SEBI registered advisor.'
+        prompt = f"""
+        User Context (For reference only):
+        - Knowledge Level/Risk: {user_profile.get('risk_category', 'General User')}
+        - Current Holdings: {portfolio_summary}
+
+        User's Question:
+        "{user_query}"
+
+        Task:
+        Please provide the best, most helpful answer to the user's question above.
+        - Adapt your explanation to match the user's likely understanding level.
+        - If the question is about finance, use the Indian context (Nifty/Sensex).
+        - If the question is general (e.g., "How are you?"), answer naturally.
+        - Be clear, concise, and friendly.
         """
         
         try:
-            # 2. Call Google Gemini
-            response = self.model.generate_content(system_prompt)
+            
+            response = self.model.generate_content(prompt)
             return response.text
+            
         except Exception as e:
-            # Fallback if AI service is down
-            return f"My AI brain is currently reconnecting. Please try again. (Error: {str(e)})"
+            error_msg = str(e)
+            if "429" in error_msg or "Quota exceeded" in error_msg:
+                return "I'm receiving too many requests. Please wait 30 seconds and try again."
+            
+            return f"I'm having trouble connecting right now. Please try again. (Error: {error_msg})"
