@@ -5,9 +5,6 @@ from datetime import datetime
 
 router = APIRouter()
 
-# --------------------------------------------------
-# NSE CONFIG
-# --------------------------------------------------
 BASE_URL = "https://www.nseindia.com"
 
 HEADERS = {
@@ -18,11 +15,8 @@ HEADERS = {
     "Connection": "keep-alive",
 }
 
-# --------------------------------------------------
-# SIMPLE IN-MEMORY CACHE
-# --------------------------------------------------
 CACHE = {}
-CACHE_TTL = 30  # seconds
+CACHE_TTL = 30 
 
 
 def cache_get(key):
@@ -37,9 +31,12 @@ def cache_set(key, value):
     CACHE[key] = (value, time.time())
 
 
-# --------------------------------------------------
-# NSE SESSION (ANTI-BLOCK, HARDENED)
-# --------------------------------------------------
+def get_stock_logo(symbol: str | None):
+    if not symbol:
+        return None
+    return f"https://assets.tickertape.in/stocks/{symbol.upper()}.png"
+
+
 def create_session():
     session = requests.Session()
     session.headers.update(HEADERS)
@@ -50,10 +47,6 @@ def create_session():
 
     return session
 
-
-# --------------------------------------------------
-# 1️⃣ MARKET STATUS
-# --------------------------------------------------
 @router.get("/market-status")
 def market_status():
     now = datetime.now()
@@ -70,10 +63,6 @@ def market_status():
 
     return {"status": "OPEN"}
 
-
-# --------------------------------------------------
-# 2️⃣ ALL MAJOR INDICES
-# --------------------------------------------------
 @router.get("/indices")
 def get_indices():
     cached = cache_get("indices")
@@ -114,10 +103,6 @@ def get_indices():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-# --------------------------------------------------
-# 3️⃣ ALL NIFTY-50 STOCKS
-# --------------------------------------------------
 @router.get("/stocks")
 def get_all_stocks():
     cached = cache_get("stocks")
@@ -137,9 +122,10 @@ def get_all_stocks():
 
         result = []
         for s in data["data"]:
+            symbol = s.get("symbol")
             result.append({
-                "symbol": s.get("symbol"),
-                "name": s.get("meta", {}).get("companyName", s.get("symbol")),
+                "symbol": symbol,
+                "name": s.get("meta", {}).get("companyName", symbol),
                 "price": s.get("lastPrice"),
                 "change": s.get("change"),
                 "percent": s.get("pChange"),
@@ -147,6 +133,7 @@ def get_all_stocks():
                 "high": s.get("dayHigh"),
                 "low": s.get("dayLow"),
                 "previousClose": s.get("previousClose"),
+                "logo": get_stock_logo(symbol),
             })
 
         response = {"count": len(result), "stocks": result}
@@ -158,9 +145,6 @@ def get_all_stocks():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --------------------------------------------------
-# 4️⃣ TOP GAINERS & LOSERS
-# --------------------------------------------------
 @router.get("/top-movers")
 def top_movers():
     cached = cache_get("top_movers")
@@ -184,12 +168,20 @@ def top_movers():
 
         response = {
             "gainers": [
-                {"symbol": s.get("symbol"), "percent": s.get("pChange")}
-                for s in stocks_sorted[:5]
+                {
+                    "symbol": s.get("symbol"),
+                    "percent": s.get("pChange"),
+                    "logo": get_stock_logo(s.get("symbol")),
+                }
+                for s in stocks_sorted if s.get("pChange", 0) > 0
             ],
             "losers": [
-                {"symbol": s.get("symbol"), "percent": s.get("pChange")}
-                for s in stocks_sorted[-5:]
+                {
+                    "symbol": s.get("symbol"),
+                    "percent": s.get("pChange"),
+                    "logo": get_stock_logo(s.get("symbol")),
+                }
+                for s in stocks_sorted if s.get("pChange", 0) < 0
             ],
         }
 
@@ -200,14 +192,10 @@ def top_movers():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --------------------------------------------------
-# 5️⃣ SINGLE STOCK DETAILS (SAFE)
-# --------------------------------------------------
 @router.get("/stock/{symbol}")
 def stock_details(symbol: str):
     symbol_upper = symbol.upper()
 
-    # 🚫 BLOCK INDEX SYMBOLS (VERY IMPORTANT)
     if any(k in symbol_upper for k in ["NIFTY", "SENSEX", "BANK", "MIDCAP", "SMALLCAP"]):
         raise HTTPException(
             status_code=400,
@@ -234,15 +222,13 @@ def stock_details(symbol: str):
             "open": p.get("open"),
             "high": p.get("intraDayHighLow", {}).get("max"),
             "low": p.get("intraDayHighLow", {}).get("min"),
+            "logo": get_stock_logo(symbol_upper),
         }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# --------------------------------------------------
-# 6️⃣ HEALTH CHECK
-# --------------------------------------------------
 @router.get("/health")
 def health():
     return {
