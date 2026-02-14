@@ -1,24 +1,27 @@
 import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
+from dotenv import load_dotenv
 
 from app.database.models import (
-    User, 
-    Portfolio, 
-    UserActivityLog, 
-    TipCheckHistory, 
-    AlertConfig, 
+    User,
+    Portfolio,
+    UserActivityLog,
+    TipCheckHistory,
+    AlertConfig,
 )
+
+load_dotenv(dotenv_path=".env")
+
 
 async def init_db():
     mongo_url = os.getenv("MONGO_URL")
-    
+
     if not mongo_url:
-        print("❌ Error: MONGO_URL not found in .env file!")
-        return
+        raise RuntimeError("MONGO_URL not found. Add it in .env or environment variables.")
 
     client = AsyncIOMotorClient(mongo_url)
-    
+
     await init_beanie(
         database=client.arthaguard_db,  # type: ignore
         document_models=[
@@ -27,6 +30,6 @@ async def init_db():
             UserActivityLog,
             TipCheckHistory,
             AlertConfig,
-        ]
+        ],
     )
-    print("✅ Database Initialized with all models.")
+    print("Database initialized with all models.")

@@ -1,7 +1,7 @@
 import concurrent.futures
 import logging
 import yfinance as yf
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from decimal import Decimal
 from dataclasses import dataclass
@@ -23,6 +23,34 @@ logger = logging.getLogger("ArthaGuardAnalyzer")
 
 class MarketDataService:
     @staticmethod
+    def _candidate_symbols(symbol: str) -> List[str]:
+        cleaned = symbol.strip().upper()
+        if not cleaned:
+            return []
+        if cleaned.endswith(".NS"):
+            return [cleaned]
+        return [cleaned, f"{cleaned}.NS"]
+
+    @staticmethod
+    def fetch_live_price(symbol: str) -> Optional[float]:
+        """Fetch one symbol price with fallback between raw and NSE suffix."""
+        for candidate in MarketDataService._candidate_symbols(symbol):
+            try:
+                ticker = yf.Ticker(candidate)
+                price = ticker.fast_info.get("last_price", None)
+                if price is not None:
+                    return float(price)
+            except Exception as e:
+                logger.error(f"Error fetching {candidate}: {e}")
+        return None
+
+    @staticmethod
+    def validate_symbol(symbol: str) -> Tuple[bool, Optional[float]]:
+        """Returns whether symbol is tradeable and current price if available."""
+        price = MarketDataService.fetch_live_price(symbol)
+        return (price is not None, price)
+
+    @staticmethod
     def fetch_live_prices(symbols: List[str]) -> Dict[str, float]:
         """Fetches prices in parallel."""
         results = {}
@@ -42,7 +70,7 @@ class MarketDataService:
             future_to_stock = {executor.submit(fetch_single, s): s for s in formatted_symbols}
             for future in concurrent.futures.as_completed(future_to_stock):
                 symbol, price = future.result()
-                if price:
+                if price is not None:
                     results[symbol] = price
         return results
 
@@ -82,7 +110,8 @@ class PortfolioAnalyzer:
             # Get Live Price
             live_price_float = live_price_map.get(symbol)
             if live_price_float is None:
-                live_price = buy_price
+                retry_price = self.market_service.fetch_live_price(symbol)
+                live_price = buy_price if retry_price is None else Decimal(str(retry_price))
             else:
                 live_price = Decimal(str(live_price_float))
 
@@ -147,6 +176,6 @@ class PortfolioAnalyzer:
     def _build_empty_response(self):
         return {
             "summary": {"total_investment": 0, "current_value": 0, "total_pnl": 0},
-            "risk_profile": {"level": "LOW", "alerts": []},
+            "risk_profile": {"score": 0, "level": "LOW", "alerts": []},
             "holdings": []
         }

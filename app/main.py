@@ -1,5 +1,6 @@
 from fastapi.middleware.cors import CORSMiddleware
-from app.auth import auth_router 
+from dotenv import load_dotenv
+from app.auth import auth_router
 from app.database.mongodb import init_db
 from fastapi import FastAPI
 from app.api import portfolio_routes
@@ -8,6 +9,8 @@ from app.api import scanner_routes
 from app.api import advisory_routes
 from app.api import fraud_routes
 from app.api import market_routes
+
+load_dotenv(dotenv_path=".env")
 
 
 app = FastAPI(
@@ -20,6 +23,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",  # React (Vite) frontend
         "http://127.0.0.1:5173",
+        "http://localhost:3000",  # React frontend
+        "http://127.0.0.1:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],   # GET, POST, PUT, DELETE, OPTIONS
@@ -28,7 +33,6 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def start_database():
-    
     await init_db()
     print("✅ Connected to MongoDB successfully!")
 
