@@ -25,7 +25,20 @@ async def check_fraud_unified(
         image_obj = None
         if file:
             contents = await file.read()
-            image_obj = Image.open(io.BytesIO(contents))
+            content_type = str(file.content_type or "").lower()
+            if content_type.startswith("image/"):
+                image_obj = Image.open(io.BytesIO(contents))
+            else:
+                try:
+                    text_from_file = contents.decode("utf-8", errors="ignore").strip()
+                except Exception:
+                    text_from_file = ""
+                if text_from_file:
+                    message_content = (
+                        f"{message_content}\n\n{text_from_file}"
+                        if message_content
+                        else text_from_file
+                    )
         
         result = agent.analyze_tip(
             source=sender_source,

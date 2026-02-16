@@ -2,7 +2,6 @@ import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from dataclasses import dataclass
 
-# Download VADER lexicon (run once)
 try:
     nltk.data.find('sentiment/vader_lexicon.zip')
 except LookupError:
@@ -10,14 +9,12 @@ except LookupError:
 
 @dataclass
 class SentimentScore:
-    compound: float  # -1 (Most Negative) to +1 (Most Positive)
-    label: str       # BULLISH, BEARISH, NEUTRAL
+    compound: float  
+    label: str       
     confidence: float
 
 class FinancialSentimentEngine:
-    """
-    Analyzes text to determine financial sentiment.
-    """
+    
     def __init__(self):
         self.analyzer = SentimentIntensityAnalyzer()
 
@@ -25,7 +22,7 @@ class FinancialSentimentEngine:
         scores = self.analyzer.polarity_scores(text)
         compound = scores['compound']
 
-        # Financial Sentiment Thresholds
+        
         if compound >= 0.05:
             label = "BULLISH"
         elif compound <= -0.05:
@@ -33,7 +30,7 @@ class FinancialSentimentEngine:
         else:
             label = "NEUTRAL"
 
-        # Confidence is the absolute strength of the sentiment
+        
         confidence = round(abs(compound) * 100, 1)
 
         return SentimentScore(

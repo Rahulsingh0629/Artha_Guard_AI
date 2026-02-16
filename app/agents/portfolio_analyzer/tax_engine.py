@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from enum import Enum
 from dataclasses import dataclass
@@ -95,7 +95,11 @@ class AdvancedTaxEngine:
         
         # 1. Input Sanitization & Type Conversion
         if not buy_date:
-            buy_date = datetime.utcnow()
+            buy_date = datetime.now(timezone.utc)
+        elif buy_date.tzinfo is None:
+            buy_date = buy_date.replace(tzinfo=timezone.utc)
+        else:
+            buy_date = buy_date.astimezone(timezone.utc)
         
         # Convert floats to Decimals for math
         d_buy_price = Decimal(str(buy_price))
@@ -103,7 +107,7 @@ class AdvancedTaxEngine:
         d_qty = Decimal(str(quantity))
         d_realized_ltcg_ytd = Decimal(str(realized_ltcg_ytd))
         
-        sell_date = datetime.utcnow() # Assuming calculation is for "Now"
+        sell_date = datetime.now(timezone.utc) # Assuming calculation is for "Now"
         
         # 2. Basic Calculations
         holding_days = (sell_date - buy_date).days

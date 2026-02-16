@@ -9,6 +9,9 @@ from app.database.models import (
     UserActivityLog,
     TipCheckHistory,
     AlertConfig,
+    AlertEvent,
+    UserAlertPreference,
+    UserScannerWatchlist,
 )
 
 load_dotenv(dotenv_path=".env")
@@ -30,6 +33,9 @@ async def init_db():
             UserActivityLog,
             TipCheckHistory,
             AlertConfig,
+            AlertEvent,
+            UserAlertPreference,
+            UserScannerWatchlist,
         ],
     )
     print("Database initialized with all models.")

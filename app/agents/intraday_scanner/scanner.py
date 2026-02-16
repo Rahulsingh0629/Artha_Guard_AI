@@ -1,4 +1,7 @@
-import yfinance as yf
+try:
+    import yfinance as yf
+except Exception:
+    yf = None
 import concurrent.futures
 import pandas as pd
 from datetime import datetime
@@ -12,6 +15,9 @@ class MarketScanner:
     
     def analyze_stock(self, symbol: str) -> Dict[str, Any]:
         try:
+            if yf is None:
+                return {"error": "Market data provider unavailable: yfinance not installed"}
+
             ticker_sym = f"{symbol}.NS" if not symbol.endswith(".NS") else symbol
             stock = yf.Ticker(ticker_sym)
             

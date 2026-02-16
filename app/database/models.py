@@ -43,6 +43,7 @@ class Portfolio(Document):
     quantity: int = 0
     average_buy_price: float = 0.0
     sector: Optional[str] = None
+    buy_datetime: Optional[datetime] = None
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -77,6 +78,45 @@ class AlertConfig(Document):
 
     class Settings:
         name = "alert_configs"
+
+class AlertEvent(Document):
+    user_email: str
+    symbol: str
+    alert_type: str
+    priority_score: int
+    message: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "alert_events"
+        indexes = ["user_email", "created_at", "priority_score"]
+
+class UserAlertPreference(Document):
+    user_email: str
+    enabled: bool = True
+    preferred_symbols: list[str] = Field(default_factory=list)
+    daily_max_picks: int = 7
+    min_profit_score: int = 40
+
+    class Settings:
+        name = "user_alert_preferences"
+        indexes = ["user_email"]
+
+class UserScannerWatchlist(Document):
+    user_email: str
+    stock_symbol: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "user_scanner_watchlist"
+        indexes = [
+            "user_email",
+            "stock_symbol",
+            IndexModel(
+                [("user_email", ASCENDING), ("stock_symbol", ASCENDING)],
+                unique=True
+            ),
+        ]
 
 class OTPVerification(Document):
     email: str

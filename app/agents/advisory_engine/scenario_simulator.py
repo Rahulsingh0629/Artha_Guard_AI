@@ -34,5 +34,5 @@ class ScenarioSimulator:
             "worst_case_scenario": round(worst_case, 2),
             "likely_scenario": round(average_case, 2),
             "best_case_scenario": round(best_case, 2),
-            "insight": f"In 95% of cases, your wealth will grow to at least ₹{round(worst_case, 2)}"
+            "insight": f"In 95% of cases, your wealth will grow to at least Rs. {round(worst_case, 2)}"
         }
