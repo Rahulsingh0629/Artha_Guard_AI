@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "super_secret_key_for_jwt") 
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
     
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./arthaguard.db") 
